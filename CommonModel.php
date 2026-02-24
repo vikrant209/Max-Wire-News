@@ -1,0 +1,504 @@
+<?php
+
+/**
+ * Description of CommonModel
+ *
+ * @author deepak
+ */
+class CommonModel {
+
+    protected $objDb;
+    protected $config;
+
+    function __construct($db, $config) {
+        $this->objDb = $db;
+        $this->config = $config;
+    }
+
+    function createInsertUpdateArray($table, $res, $insert = 1) {
+        $q = $this->objDb->getPdo()->prepare("DESCRIBE " . $table);
+        $q->execute();
+        $table_fields = $q->fetchAll(PDO::FETCH_COLUMN);
+
+        $values = array();
+        foreach ($res as $key => $val) {
+            if (in_array($key, $table_fields)) {
+                $values[$key] = $val;
+            }
+        }
+
+        if ($insert == 1) {
+            $values['createddate'] = date('Y-m-d H:i:s');
+            $values['createdby'] = $_SESSION['loginId'];
+        } else {
+            $values['modifieddate'] = date('Y-m-d H:i:s');
+            $values['modifiedby'] = $_SESSION['loginId'];
+        }
+        return $values;
+    }
+
+    function isUnique($table, $field, $scap_id = null) {
+        $query = $this->objDb->from($table)->select('count(*) as counts')
+                ->where('status = ?', 1)
+                ->where('deleted = ?', 0);
+        $s = array_values($field);
+        $query->where(key($field) . ' = ?', $s['0']);
+
+        if ($scap_id != null) {
+            $s = array_values($scap_id);
+            $query->where(key($scap_id) . ' != ? ', $s['0']);
+        }
+
+        $a = $query->fetchAll();
+
+        return $a['0']['counts'] == 0 ? TRUE : FALSE;
+    }
+
+    function dropdownarray($table, $id, $opt) {
+        if (isset($_SESSION['loginSchoolId']) && $_SESSION['loginSchoolId'] != null) {
+            $q = $this->objDb->getPdo()->prepare("DESCRIBE " . $table);
+            $q->execute();
+            $table_fields = $q->fetchAll(PDO::FETCH_COLUMN);
+            if (in_array('schoolid', $table_fields)) {
+                $query = $this->objDb->from($table)
+                        ->where('status = ?', 1)
+                        ->where('deleted = ?', 0)
+                        ->where('schoolid = ?', $_SESSION['loginSchoolId']);
+            } elseif (in_array('school_id', $table_fields)) {
+                $query = $this->objDb->from($table)
+                        ->where('status = ?', 1)
+                        ->where('deleted = ?', 0)
+                        ->where('school_id = ?', $_SESSION['loginSchoolId']);
+            } elseif ($table == 'school') {
+                $query = $this->objDb->from($table)
+                        ->where('status = ?', 1)
+                        ->where('deleted = ?', 0)
+                        ->where('id = ?', $_SESSION['loginSchoolId']);
+			 } elseif ($table == 'staff') {
+			 
+                $query = $this->objDb->from($table)
+						 ->join('staff_school ON staff_school.staffid = staff.id')                		
+                        ->where('staff.status = ?', 1)
+                        ->where('staff.deleted = ?', 0)
+                        ->where('staff_school.schoolid = ?', $_SESSION['loginSchoolId']);
+            } else {
+                $query = $this->objDb->from($table)
+                        ->where('status = ?', 1)
+                        ->where('deleted = ?', 0);
+            }
+            $arr = array();
+        } else {
+            $query = $this->objDb->from($table)
+                    ->where('status = ?', 1)
+                    ->where('deleted = ?', 0);
+        }
+
+        $arr = array('' => 'Select');
+        foreach ($query as $row) {
+            if (array_key_exists('approved', $row)) {
+                if ($row['approved'] == 1) {
+                    $arr[$row[$id]] = $row[$opt];
+                }
+            } else {
+                $arr[$row[$id]] = $row[$opt];
+            }
+        }
+
+        return $arr;
+    }
+
+    function classBySchoolId($sid) {
+//        $query = $this->objDb->from('classsection')
+//                ->where('status = ?', 1)
+//                ->where('schoolid=?', $sid)
+//                ->where('deleted = ?', 0)
+//                ->where('approved=?', 1);
+        $query = $this->objDb->from('class')
+                ->where('status = ?', 1)
+                ->where('schoolid=?', $sid)
+                ->where('deleted = ?', 0)
+                ->where('approved=?', 1);
+        $arr = array();
+        $i = 0;
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['id'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    function studentTypeBySchoolId($sid) {
+        $query = $this->objDb->from('student_type')
+                        ->where('status = ?', 1)
+                        ->where('schoolid=?', $sid)
+                        ->where('deleted = ?', 0)->where('approved=?', 1);
+
+        $arr = array();
+        $i = 0;
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['id'];
+            $arr[$i]['name'] = $row['type'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    function studentHouseBySchoolId($sid) {
+        $query = $this->objDb->from('student_house')
+                        ->where('status = ?', 1)
+                        ->where('schoolid=?', $sid)
+                        ->where('deleted = ?', 0)->where('approved=?', 1);
+
+        $arr = array();
+        $i = 0;
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['id'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    function stateCountyId($sid) {
+        $query = $this->objDb->from('states')
+                ->where('country_id=?', $sid);
+        $arr = array();
+        $i = 0;
+        $arr[$i]['id'] = '';
+        $arr[$i++]['name'] = '';
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['name'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    function lgaByStateId($sid) {
+        $query = $this->objDb->from('states')
+                ->where('name=?', $sid);
+        $i = 0;
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['id'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        $query = $this->objDb->from('local_governments')
+                ->where('state_id=?', $arr[0]['id']);
+        $arr = array();
+        $i = 0;
+        $arr[$i]['id'] = '';
+        $arr[$i++]['name'] = '';
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['name'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    function approveYn($table, $yn, $id) {
+        $ar = array('approved' => $yn, 'approvedby' => $_SESSION['loginId']);
+        $values = $this->createInsertUpdateArray($table, $ar, 0);
+
+        $query = $this->objDb->update($table)->set($values)->where('id', $id);
+        return $query->execute();
+    }
+
+    public function roleBySchoolId($id) {
+        $query = $this->objDb->from('role')
+                ->where('status = ?', 1)
+                ->where('deleted = ?', 0)
+                ->where('schoolid = ?', $id)
+                ->where('parent_id = ?', 0);
+        $arr = array();
+        $i = 0;
+        foreach ($query as $row) {
+            $arr[$i]['id'] = $row['id'];
+            $arr[$i]['name'] = $row['name'];
+            $i++;
+        }
+        return $arr;
+    }
+
+    public function createUserLogin($userName, $type, $id, $pass) {
+        $res = array();
+        $res['username'] = $userName;
+        $res['type'] = $type;
+        $res['password'] = md5($pass);
+        $res['id_of_type_table'] = $id;
+        $values = $this->createInsertUpdateArray('login', $res, 1);
+        $query = $this->objDb->insertInto('login')->values($values);
+        $return = $query->execute();
+    }
+
+    public function updateUserLogin($userName, $password, $type, $id) {
+        if ($password != null) {
+            $password = " `password` = '" . md5($password) . "', ";
+        }
+
+        //$t = $this->checkUserLogin($userName, $type , $id);
+
+        $sql = "SELECT username FROM login where 1  ";
+        //if ($type != null && $typeid!=null) {
+        $sql.=" and `id_of_type_table` = '" . $id . "' and `type` = '" . $type . "'";
+        //}
+        $rows = $this->objDb->getPdo()->query($sql);
+        $ar = array();
+        $i = 0;
+        foreach ($rows as $row) {
+            $ar[$i++] = $row['username'];
+        }
+
+        if (count($ar) == 0) {
+            $this->createUserLogin($userName, $type, $id);
+            exit();
+        }
+
+        $sql = "UPDATE `login` SET 
+            `username` = '" . $userName . "', " . $password . " `updatedate` = '" . date('Y-m-d H:i:s') . "' 
+            WHERE `id_of_type_table` = '" . $id . "' and `type` = '" . $type . "'";
+        $this->objDb->getPdo()->query($sql);
+    }
+
+    public function checkUserLogin($uname, $type = null, $typeid = null) {
+        $sql = "SELECT username FROM login where username='" . $uname . "' ";
+        if ($type != null && $typeid != null) {
+            $sql.=" and `id_of_type_table` != '" . $typeid . "' and `type` != '" . $type . "'";
+        }
+        $rows = $this->objDb->getPdo()->query($sql);
+        $ar = array();
+        $i = 0;
+        foreach ($rows as $row) {
+            $ar[$i++] = $row['username'];
+        }
+
+        return count($ar) > 0 ? false : true;
+    }
+
+    public function checkSchoolByUserId($userId, $type, $schoolId) {
+        switch ($type) {
+            case'parents':
+                $sql = "SELECT * FROM student WHERE schoolid=" . $schoolId . ' and parentid=' . $userId;
+                break;
+            case'staff':
+                $sql = "SELECT * FROM staff_school WHERE schoolid=" . $schoolId . ' and staffid=' . $userId;
+                break;
+            case'student':
+                $sql = "SELECT * FROM student WHERE schoolid=" . $schoolId . ' and id=' . $userId;
+                break;
+        }
+        //echo $sql;die;
+        $rows = $this->objDb->getPdo()->query($sql);
+        $ar = array();
+        $i = 0;
+        foreach ($rows as $row) {
+            $ar[$i++] = $row;
+        }
+        return count($ar) == 0 ? false : true;
+    }
+
+    public function getMenuByRoleId($id) {
+        $sql = "SELECT * FROM  "
+                . " permission p "
+                . " JOIN menu_and_link ml"
+                . " on p.label_id=ml.id WHERE"
+                . " role_id=" . $id . " and ml.show_in_left_yn=1";
+        $rows = $this->objDb->getPdo()->query($sql);
+        $ar = array();
+        $i = 0;
+        foreach ($rows as $row) {
+            $ar[$i++] = $row;
+        }
+    }
+
+    public function getLeftMenu($studentYN = 0, $parentYN = 0, $type = null) {
+        $sql = "SELECT * FROM  menu_and_link ml"
+                . " WHERE"
+                . " ml.show_in_left_yn=1 and parent_id =0 ";
+        $where = " ";
+        if ($studentYN == 1) {
+            $where = " and show_to_student = 1 ";
+        }
+
+        if ($parentYN == 1) {
+            $where = " and show_to_parent = 1 ";
+        }
+
+
+        $rows = $this->objDb->getPdo()->query($sql . $where);
+        $ar = array();
+        $i = 0;
+        $p = array();
+        foreach ($rows as $row) {
+            $p[$row['id']]['p'] = $row;
+            $sql = "SELECT * FROM  menu_and_link ml"
+                    . " WHERE"
+                    . " ml.show_in_left_yn=1 and parent_id =" . $row['id'];
+
+            if ($type == 'staff') {
+                $sql = "SELECT * FROM menu_and_link ml join permission p on p.label_id=ml.id "
+                        . " WHERE  "
+                        . " p.role_id = " . $_SESSION['loginedUser']['roleid']
+                        . " and ml.show_in_left_yn = 1 and parent_id = " . $row['id'];
+            }
+
+            $rows1 = $this->objDb->getPdo()->query($sql . $where);
+
+            foreach ($rows1 as $row1) {
+                $p[$row['id']]['c'][] = $row1;
+            }
+        }
+
+        $menu = array();
+        foreach ($p as $row) {
+            if (isset($row['c']) && count($row['c']) > 0) {
+                $menu[] = $row;
+            }
+        }
+        $this->chkAutho();
+        return $menu;
+    }
+
+    public function chkAutho() {
+        if (isset($_SESSION['loginedUser']['roleid']) && $_SESSION['loginedUser']['roleid'] != null) {
+            $sql = "SELECT * FROM role where id=" . $_SESSION['loginedUser']['roleid'];
+            $rows1 = $this->objDb->getPdo()->query($sql);
+            foreach ($rows1 as $row1) {
+                $_SESSION['role_for_auth'] = $row1['can_approve'];
+            }
+        }
+    }
+
+    public function auditTrail() {
+        try {
+            if (isset($_REQUEST['q']) && $_REQUEST['q'] != null && isset($_SESSION['loginedUser']['id']) && $_SESSION['loginedUser']['id'] != null) {
+                $insert = array();
+                $insert['section'] = $_REQUEST['q'];
+                $insert['data'] = serialize($_REQUEST);
+                 $insert['user_id'] = $_SESSION['loginId']; //$insert['user_id'] = $_SESSION['loginedUser']['id']; 
+                $insert['access_date_time'] = date('Y-m-d H:i:s');
+                $insert['usertype'] = $_SESSION['UTYPE'];
+                $this->objDb->insertInto('audit_trail')->values($insert)->execute();
+            }
+        } catch (\Exception $e) {
+            echo $e->getMessage();
+            die;
+        }
+    }
+
+    public function listAuditTrail($res) {
+        $user_id = @$res['userid'];
+//        $select = "SELECT * FROM audit_trail join login on "
+//                . "audit_trail.user_id=login.id  where 1 and access_date_time >= (NOW() - INTERVAL 3 MONTH) ";
+        $select = "SELECT lo.username, l.section,l.access_date_time,lo.type as usertype,l.`data`
+  , sc1.name as sschool,sc2.name as stschool,sc3.name as ptschool
+ , concat(s.title,' ',s.firstname,' ',s.lastname,' ',s.middlename) as staffname
+ , concat(st.title,' ',st.last_name,' ',st.first_name,' ', st.middle_name) as stuname,
+ concat(pt.title, pt.firstname,pt.lastname,pt.middlename) as paname
+ FROM audit_trail l 
+ join login lo on l.user_id=lo.id
+ left join staff s on lo.id_of_type_table=s.id 
+ left join student st on lo.id_of_type_table=st.id
+ left join parents pt on lo.id_of_type_table=pt.id
+ left join staff_school ss on ss.staffid=s.id  
+ left join school sc1 on sc1.id=ss.schoolid
+ left join school sc2 on sc2.id=st.schoolid
+ left join student stp on stp.parentid=pt.id
+ left join school sc3 on sc3.id=stp.schoolid where 1 and lo.username is not null ";
+        if (isset($_SESSION['loginId']) && $_SESSION['loginId'] != null && $_SESSION['UTYPE'] != 'users') {
+            //$select.='  AND user_id=' . $_SESSION['loginId'];
+        }
+//        
+//=======
+//    public function listAuditTrail($res) {
+//		//print_r($res);
+//		$user_id=@$res['userid'];
+//        $select = "SELECT * FROM audit_trail join login on audit_trail.user_id=login.id  where 1 ";
+//        if (isset($_SESSION['loginId']) && $_SESSION['loginId'] != null && $_SESSION['UTYPE'] !='users') {
+//            //$select.=' AND user_id=' . $_SESSION['loginId'];
+//        }
+        if (isset($user_id)) {
+            $select.=' AND user_id=' . $user_id;
+        } else {
+            $select.=' AND user_id=' . $_SESSION['loginId'];
+        }
+        $select.=' ORDER BY access_date_time DESC limit 500';
+        //echo $select;die;
+
+        $r = $this->objDb->getPdo()->query($select);
+        $rt = array();
+        if ($r) {
+            foreach ($r as $k => $f) {
+                $rt[] = $f;
+            }
+        }
+        return $rt;
+    }
+
+    public function getUserNameByType($type, $scid) {
+
+        if ($type == 'staff') {
+            $sql = " JOIN staff on staff.id=login.id_of_type_table "
+                    . " join staff_school on staff_school.staffid=staff.id";
+        }
+
+        if ($type == 'student') {
+            $sql = " JOIN student on student.id=login.id_of_type_table ";
+        }
+
+        if ($type == 'parents') {
+            $sql = " JOIN parents on parents.id=login.id_of_type_table "
+                    . " join student on student.parentid=parents.id";
+        }
+
+        $sql = "SELECT login.id, login.username FROM login " . $sql . " WHERE login.type='" . $type . "' ";
+        if ($scid != null) {
+            $sql .= " and schoolid=" . $scid;
+        }
+        //echo $sql;
+        $r = $this->objDb->getPdo()->query($sql);
+        $rt = array();
+
+        foreach ($r as $k => $f) {
+            $rt[$f['id']] = $f['username'];
+        }
+        return $rt;
+    }
+
+    public function updateUserPassword($str, $id) {
+        $update = 'UPDATE login SET password="' . md5($str) . '" WHERE id=' . $id;
+        $this->objDb->getPdo()->query($update);
+    }
+
+    public function auditTrailUserList() {
+        $sql = "SELECT lo.username, lo.id
+  , sc1.name as sschool,sc2.name as stschool,sc3.name as ptschool,lo.type as usertype
+ , concat(s.title,' ',s.firstname,' ',s.lastname,' ',s.middlename) as staffname
+ , concat(st.title,' ',st.last_name,' ',st.first_name,' ', st.middle_name) as stuname,
+ concat(pt.title, pt.firstname,pt.lastname,pt.middlename) as paname
+ FROM login lo left join staff s on lo.id_of_type_table=s.id 
+ left join student st on lo.id_of_type_table=st.id
+ left join parents pt on lo.id_of_type_table=pt.id
+ left join staff_school ss on ss.staffid=s.id  
+ left join school sc1 on sc1.id=ss.schoolid
+ left join school sc2 on sc2.id=st.schoolid
+ left join student stp on stp.parentid=pt.id
+ left join school sc3 on sc3.id=stp.schoolid where 1 and lo.username is not null ";
+   if (isset($_SESSION['loginSchoolId']) && $_SESSION['loginSchoolId'] != null) {
+      $sql .= " and ( sc1.id= ".$_SESSION['loginSchoolId']." OR "
+              . " sc2.id= ".$_SESSION['loginSchoolId']." OR "
+              . "sc3.id= ".$_SESSION['loginSchoolId']." ) ";       
+   }
+        
+        
+        $r = $this->objDb->getPdo()->query($sql);
+        $ar = array();
+        foreach ($r as $key => $val) {
+            $ar[$val['id']] = $val['username'];
+        }
+        return $ar;
+    }
+
+}
